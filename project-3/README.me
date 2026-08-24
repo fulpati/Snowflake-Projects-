@@ -1,0 +1,458 @@
+# ❄️ Enterprise Incremental Sales Data Warehouse using Snowflake
+
+## 📌 Project Overview
+
+This project implements an **Enterprise Incremental Sales Data Warehouse using Snowflake**.
+
+The project demonstrates how a data warehouse can efficiently process newly arriving sales transactions without repeatedly reloading the complete historical dataset.
+
+The pipeline uses **Snowflake Streams and Tasks** for incremental data processing, along with **Time Travel** for recovering deleted data and **Zero Copy Cloning** for creating testing environments without duplicating storage.
+
+The project also includes data validation, audit-oriented processing, analytical reporting, views, and a materialized view.
+
+---
+
+## 🎯 Project Objectives
+
+The main objectives of this project are to:
+
+* Perform incremental data loading
+* Use Snowflake Streams to capture newly inserted records
+* Automate data processing using Snowflake Tasks
+* Recover accidentally deleted records using Time Travel
+* Create testing environments using Zero Copy Cloning
+* Validate newly arrived sales records
+* Perform sales data analytics
+* Create analytical Views and Materialized Views
+
+---
+
+## 🏗️ Architecture
+
+```text
+                    CSV FILES
+                       │
+                       ▼
+              ┌─────────────────┐
+              │  Snowflake Stage │
+              └────────┬────────┘
+                       │
+                       ▼
+             ┌──────────────────┐
+             │ Historical Tables │
+             │                  │
+             │ CUSTOMERS        │
+             │ PRODUCTS         │
+             │ BRANCHES         │
+             │ SALES            │
+             └────────┬─────────┘
+                      │
+                      │ New Sales
+                      ▼
+              ┌───────────────┐
+              │ NEW_SALES     │
+              └───────┬───────┘
+                      │
+                      ▼
+              ┌───────────────┐
+              │ SALES_STREAM  │
+              │ Change Capture│
+              └───────┬───────┘
+                      │
+                      ▼
+              ┌───────────────┐
+              │ MERGE / TASK  │
+              └───────┬───────┘
+                      │
+                      ▼
+              ┌───────────────┐
+              │ SALES TABLE   │
+              └───────┬───────┘
+                      │
+          ┌───────────┼──────────────┐
+          ▼           ▼              ▼
+      Analytics    Time Travel   Zero Copy
+          │                         Clone
+          ▼
+      Views / Materialized Views
+```
+
+---
+
+## 📂 Input Data
+
+The project uses the following CSV files:
+
+### `customers.csv`
+
+Contains customer information:
+
+* Customer ID
+* Customer Name
+* City
+* Membership
+
+### `products.csv`
+
+Contains product information:
+
+* Product ID
+* Product Name
+* Category
+* Price
+
+### `branches.csv`
+
+Contains branch information:
+
+* Branch ID
+* Branch Name
+* State
+
+### `sales_history.csv`
+
+Contains the initial historical sales transactions.
+
+### `new_sales.csv`
+
+Contains newly arriving sales transactions used to demonstrate incremental data loading.
+
+---
+
+## 🗄️ Snowflake Environment
+
+The following Snowflake objects were created:
+
+```text
+ENTERPRISE_WH
+    │
+    └── ENTERPRISE_DB
+            │
+            └── SALES_SCHEMA
+                    │
+                    ├── CUSTOMERS
+                    ├── PRODUCTS
+                    ├── BRANCHES
+                    ├── SALES
+                    ├── NEW_SALES
+                    ├── SALES_STREAM
+                    ├── SALES_TEST
+                    ├── CUSTOMER_REVENUE
+                    └── BRANCH_REVENUE
+```
+
+Additional Snowflake objects include:
+
+* CSV File Format
+* Internal Stage
+* Incremental Loading Task
+
+---
+
+## 🔄 Incremental Data Loading
+
+The project initially loads historical sales data into the `SALES` table.
+
+New transactions are then loaded separately into `NEW_SALES`.
+
+A Snowflake **Stream** tracks newly inserted changes, allowing the pipeline to identify newly arrived records.
+
+The incremental processing workflow is:
+
+```text
+new_sales.csv
+      ↓
+NEW_SALES
+      ↓
+SALES_STREAM
+      ↓
+MERGE
+      ↓
+SALES
+```
+
+The incremental dataset contains Sale IDs **6–10**, which are added to the historical Sale IDs **1–5**.
+
+---
+
+## 🌊 Snowflake Stream
+
+A Stream named:
+
+```text
+SALES_STREAM
+```
+
+was created on the `SALES` table.
+
+The Stream captures changes made to the table and allows newly inserted records to be identified.
+
+This demonstrates **Change Data Capture (CDC)** using Snowflake Streams.
+
+---
+
+## ⚙️ Snowflake Task
+
+A Snowflake Task named:
+
+```text
+DAILY_SALES_INCREMENTAL_LOAD
+```
+
+was created to automate the incremental loading process.
+
+The Task uses a `MERGE` operation to:
+
+* Update existing Sale IDs
+* Insert new Sale IDs
+
+The Task was resumed and manually executed to verify successful execution.
+
+---
+
+## 🔍 Data Validation
+
+The project validates the newly loaded sales data using multiple checks.
+
+### Duplicate Sale IDs
+
+```sql
+SELECT
+    SALE_ID,
+    COUNT(*) AS RECORD_COUNT
+FROM SALES
+GROUP BY SALE_ID
+HAVING COUNT(*) > 1;
+```
+
+### Missing Customer IDs
+
+The sales table is checked against the `CUSTOMERS` table to identify invalid customer references.
+
+### Invalid Product IDs
+
+The sales table is checked against the `PRODUCTS` table to identify invalid product references.
+
+### Incremental Record Count
+
+The newly inserted records are validated to ensure that the expected incremental transactions were loaded.
+
+---
+
+## 🕒 Time Travel
+
+Snowflake Time Travel was used to demonstrate recovery of accidentally deleted data.
+
+The workflow was:
+
+```text
+Delete Sale ID 10
+       ↓
+Query historical table state
+       ↓
+Retrieve Sale ID 10
+       ↓
+Insert recovered record
+       ↓
+Verify recovery
+```
+
+This demonstrates how historical table states can be accessed and used to recover deleted records.
+
+---
+
+## 🧬 Zero Copy Clone
+
+A testing table named:
+
+```text
+SALES_TEST
+```
+
+was created as a Zero Copy Clone of `SALES`.
+
+```text
+SALES
+  │
+  └── CLONE
+        ↓
+    SALES_TEST
+```
+
+A new record was inserted into `SALES_TEST`.
+
+The original `SALES` table was then checked to verify that the modification to the clone did not affect the original table.
+
+This demonstrates Snowflake's **Zero Copy Cloning** capability.
+
+---
+
+## 📊 Business Analytics
+
+The project generates multiple analytical reports using SQL.
+
+### Customer Revenue Report
+
+Calculates total revenue generated by each customer.
+
+### Branch Revenue Report
+
+Calculates total revenue generated by each branch.
+
+### Product Revenue Report
+
+Calculates total revenue generated by each product.
+
+### Monthly Revenue Report
+
+Calculates revenue aggregated by month.
+
+### Highest Revenue Customer
+
+Identifies the customer generating the highest revenue.
+
+### Highest Revenue Branch
+
+Identifies the branch generating the highest revenue.
+
+### Top Five Products
+
+Ranks products based on their generated revenue.
+
+### Customer Purchase Frequency
+
+Counts the number of sales transactions made by each customer.
+
+### Running Revenue
+
+Uses a SQL window function to calculate cumulative revenue over time.
+
+### Customer Ranking
+
+Uses the `RANK()` window function to rank customers according to their total revenue.
+
+---
+
+## 👁️ Views
+
+### Customer Revenue View
+
+A View named:
+
+```text
+CUSTOMER_REVENUE
+```
+
+was created to provide customer-level revenue information.
+
+### Branch Revenue Materialized View
+
+A Materialized View named:
+
+```text
+BRANCH_REVENUE
+```
+
+was created using the `SALES` table to store branch-level revenue aggregation.
+
+The branch details can then be combined with the materialized view using the `BRANCHES` table.
+
+---
+
+## 🛠️ Technologies Used
+
+* **Snowflake**
+* **SQL**
+* **Snowflake Streams**
+* **Snowflake Tasks**
+* **Snowflake Time Travel**
+* **Zero Copy Cloning**
+* **Views**
+* **Materialized Views**
+* **CSV**
+* **Git**
+* **GitHub**
+
+---
+
+## 🧠 Snowflake Concepts Demonstrated
+
+### Snowflake Administration
+
+* Warehouse
+* Database
+* Schema
+* Internal Stage
+* File Format
+
+### Data Engineering
+
+* `COPY INTO`
+* `MERGE`
+* Streams
+* Tasks
+* Time Travel
+* Zero Copy Clone
+
+### SQL Analytics
+
+* `JOIN`
+* `GROUP BY`
+* `HAVING`
+* `ORDER BY`
+* CTE concepts
+* Window Functions
+* Ranking
+* Aggregations
+
+---
+
+## 📈 Key Outcomes
+
+The project successfully demonstrates:
+
+* Historical sales data loading
+* Incremental sales processing
+* Change tracking using Streams
+* Automated processing using Tasks
+* Data quality validation
+* Deleted record recovery using Time Travel
+* Test environment creation using Zero Copy Clone
+* Customer, branch, and product revenue analysis
+* Running revenue calculation
+* Customer ranking
+* Analytical Views and Materialized Views
+
+---
+
+## 📁 Project Structure
+
+```text
+Project-3/
+│
+├── customers.csv
+├── products.csv
+├── branches.csv
+├── sales_history.csv
+├── new_sales.csv
+├── README.md
+└── SQL/
+    └── project_3.sql
+```
+
+> Update the `SQL/` section if your actual SQL file has a different name or location.
+
+---
+
+## 👤 Author
+
+**Shravani**
+
+Bachelor of Engineering — Computer Science & Engineering
+Specialization: Artificial Intelligence & Machine Learning
+
+---
+
+## ⭐ Project Highlights
+
+This project demonstrates practical experience with **Snowflake Data Warehousing, Incremental Data Pipelines, Change Data Capture, Data Validation, Automation, Historical Data Recovery, Data Cloning, and SQL Analytics**.
